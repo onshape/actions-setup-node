@@ -2,16 +2,24 @@ import * as core from '@actions/core';
 import * as cache from '@actions/cache';
 import * as path from 'path';
 import * as glob from '@actions/glob';
+import osm from 'os';
 
 import * as utils from '../src/cache-utils';
 import {restoreCache} from '../src/cache-restore';
 
 describe('cache-restore', () => {
-  process.env['GITHUB_WORKSPACE'] = path.join(__dirname, 'data');
+  const packageManagers = ['yarn', 'npm', 'pnpm'] as const;
+  type PackageManager = (typeof packageManagers)[number];
+
+  const setWorkspaceFor = (pm: PackageManager) => {
+    process.env['GITHUB_WORKSPACE'] = path.join(__dirname, 'data', pm);
+  };
+  const originalGithubWorkspace = process.env['GITHUB_WORKSPACE'];
   if (!process.env.RUNNER_OS) {
     process.env.RUNNER_OS = 'Linux';
   }
   const platform = process.env.RUNNER_OS;
+  const arch = 'arm64';
   const commonPath = '/some/random/path';
   const npmCachePath = `${commonPath}/npm`;
   const pnpmCachePath = `${commonPath}/pnpm`;
@@ -23,7 +31,7 @@ describe('cache-restore', () => {
     'abf7c9b306a3149dcfba4673e2362755503bcceaab46f0e4e6fee0ade493e20c';
   const pnpmFileHash =
     '26309058093e84713f38869c50cf1cee9b08155ede874ec1b44ce3fca8c68c70';
-  const cachesObject = {
+  const cachesObject: Record<string, string> = {
     [npmCachePath]: npmFileHash,
     [pnpmCachePath]: pnpmFileHash,
     [yarn1CachePath]: yarnFileHash,
@@ -52,6 +60,7 @@ describe('cache-restore', () => {
   let getCommandOutputSpy: jest.SpyInstance;
   let restoreCacheSpy: jest.SpyInstance;
   let hashFilesSpy: jest.SpyInstance;
+  let archSpy: jest.SpyInstance;
 
   beforeEach(() => {
     // core
@@ -102,6 +111,10 @@ describe('cache-restore', () => {
 
     // cache-utils
     getCommandOutputSpy = jest.spyOn(utils, 'getCommandOutput');
+
+    // os
+    archSpy = jest.spyOn(osm, 'arch');
+    archSpy.mockImplementation(() => arch);
   });
 
   describe('Validate provided package manager', () => {
@@ -121,9 +134,11 @@ describe('cache-restore', () => {
       ['yarn', '1.2.3', yarnFileHash],
       ['npm', '', npmFileHash],
       ['pnpm', '', pnpmFileHash]
-    ])(
+    ] as const)(
       'restored dependencies for %s',
       async (packageManager, toolVersion, fileHash) => {
+        // Set workspace to the appropriate fixture folder
+        setWorkspaceFor(packageManager);
         getCommandOutputSpy.mockImplementation((command: string) => {
           if (command.includes('version')) {
             return toolVersion;
@@ -135,7 +150,7 @@ describe('cache-restore', () => {
         await restoreCache(packageManager, '');
         expect(hashFilesSpy).toHaveBeenCalled();
         expect(infoSpy).toHaveBeenCalledWith(
-          `Cache restored from key: node-cache-${platform}-${packageManager}-${fileHash}`
+          `Cache restored from key: node-cache-${platform}-${arch}-${packageManager}-${fileHash}`
         );
         expect(infoSpy).not.toHaveBeenCalledWith(
           `${packageManager} cache is not found`
@@ -151,9 +166,11 @@ describe('cache-restore', () => {
       ['yarn', '1.2.3', yarnFileHash],
       ['npm', '', npmFileHash],
       ['pnpm', '', pnpmFileHash]
-    ])(
+    ] as const)(
       'dependencies are changed %s',
       async (packageManager, toolVersion, fileHash) => {
+        // Set workspace to the appropriate fixture folder
+        setWorkspaceFor(packageManager);
         getCommandOutputSpy.mockImplementation((command: string) => {
           if (command.includes('version')) {
             return toolVersion;
@@ -174,6 +191,11 @@ describe('cache-restore', () => {
   });
 
   afterEach(() => {
+    if (originalGithubWorkspace === undefined) {
+      delete process.env['GITHUB_WORKSPACE'];
+    } else {
+      process.env['GITHUB_WORKSPACE'] = originalGithubWorkspace;
+    }
     jest.resetAllMocks();
     jest.clearAllMocks();
   });

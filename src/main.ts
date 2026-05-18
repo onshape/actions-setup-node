@@ -1,6 +1,7 @@
 import * as core from '@actions/core';
 
 import os from 'os';
+import fs from 'fs';
 
 import * as auth from './authutil';
 import * as path from 'path';
@@ -20,6 +21,9 @@ export async function run() {
 
     let arch = core.getInput('architecture');
     const cache = core.getInput('cache');
+    const packagemanagercache =
+      (core.getInput('package-manager-cache') || 'true').toUpperCase() ===
+      'TRUE';
 
     // if architecture supplied but node-version is not
     // if we don't throw a warning, the already installed x64 node will be used which is not probably what user meant.
@@ -36,6 +40,8 @@ export async function run() {
     if (version) {
       const token = core.getInput('token');
       const auth = !token ? undefined : `token ${token}`;
+      const mirror = core.getInput('mirror');
+      const mirrorToken = core.getInput('mirror-token');
       const stable =
         (core.getInput('stable') || 'true').toUpperCase() === 'TRUE';
       const checkLatest =
@@ -45,7 +51,9 @@ export async function run() {
         checkLatest,
         auth,
         stable,
-        arch
+        arch,
+        mirror,
+        mirrorToken
       };
       const nodeDistribution = getNodejsDistribution(nodejsInfo);
       await nodeDistribution.setupNodeJs();
@@ -54,15 +62,29 @@ export async function run() {
     await printEnvDetailsAndSetOutput();
 
     const registryUrl: string = core.getInput('registry-url');
-    const alwaysAuth: string = core.getInput('always-auth');
     if (registryUrl) {
-      auth.configAuthentication(registryUrl, alwaysAuth);
+      auth.configAuthentication(registryUrl);
     }
 
-    if (cache && isCacheFeatureAvailable()) {
-      core.saveState(State.CachePackageManager, cache);
-      const cacheDependencyPath = core.getInput('cache-dependency-path');
-      await restoreCache(cache, cacheDependencyPath);
+    const cacheDependencyPath = core.getInput('cache-dependency-path');
+
+    if (isCacheFeatureAvailable()) {
+      // if the cache input is provided, use it for caching.
+      if (cache) {
+        core.saveState(State.CachePackageManager, cache);
+        await restoreCache(cache, cacheDependencyPath);
+        // package manager npm is detected from package.json, enable auto-caching for npm.
+      } else if (packagemanagercache) {
+        const resolvedPackageManager = getNameFromPackageManagerField();
+        if (resolvedPackageManager) {
+          core.info(
+            "Detected npm as the package manager from package.json's packageManager field. " +
+              'Auto caching has been enabled for npm. If you want to disable it, set package-manager-cache input to false'
+          );
+          core.saveState(State.CachePackageManager, resolvedPackageManager);
+          await restoreCache(resolvedPackageManager, cacheDependencyPath);
+        }
+      }
     }
 
     const matchersPath = path.join(__dirname, '../..', '.github');
@@ -112,4 +134,35 @@ function resolveVersionInput(): string {
   }
 
   return version;
+}
+
+export function getNameFromPackageManagerField(): string | undefined {
+  const npmRegex = /^(\^)?npm(@.*)?$/; // matches "npm", "npm@...", "^npm@..."
+  try {
+    const packageJson = JSON.parse(
+      fs.readFileSync(
+        path.join(process.env.GITHUB_WORKSPACE!, 'package.json'),
+        'utf-8'
+      )
+    );
+
+    // Check devEngines.packageManager first (object or array)
+    const devPM = packageJson?.devEngines?.packageManager;
+    const devPMArray = devPM ? (Array.isArray(devPM) ? devPM : [devPM]) : [];
+    for (const obj of devPMArray) {
+      if (typeof obj?.name === 'string' && npmRegex.test(obj.name)) {
+        return 'npm';
+      }
+    }
+
+    // Check top-level packageManager
+    const topLevelPM = packageJson?.packageManager;
+    if (typeof topLevelPM === 'string' && npmRegex.test(topLevelPM)) {
+      return 'npm';
+    }
+
+    return undefined;
+  } catch {
+    return undefined;
+  }
 }

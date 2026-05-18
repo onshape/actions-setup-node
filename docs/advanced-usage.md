@@ -1,6 +1,6 @@
 ## Working with lockfiles
 
-All supported package managers recommend that you **always** commit the lockfile, although implementations vary doing so generally provides the following benefits:
+Most supported package managers recommend that you **always** commit the lockfile, although implementations vary doing so generally provides the following benefits:
 
 - Enables faster installation for CI and production environments, due to being able to skip package resolution.
 - Describes a single representation of a dependency tree such that teammates, deployments, and continuous integration are guaranteed to install exactly the same dependencies.
@@ -35,6 +35,25 @@ Ensure that `pnpm-lock.yaml` is always committed, when on CI pass `--frozen-lock
 - [Working with Git - Lockfiles](https://pnpm.io/git#lockfiles)
 - [Documentation of `--frozen-lockfile` option](https://pnpm.io/cli/install#--frozen-lockfile)
 
+### Running without a lockfile
+
+If you choose not to use a lockfile, you must ensure that **caching is disabled**. The `cache` feature relies on the lockfile to generate a unique key for the cache entry.
+
+To run without a lockfile:
+1. Do not set the `cache` input.
+2. If your `package.json` contains a `packageManager` field set to npm (or devEngines.packageManager), automatic caching is enabled by default. Override this by setting `package-manager-cache: false`.
+
+```yaml
+steps:
+- uses: actions/checkout@v6
+- uses: actions/setup-node@v6
+  with:
+    node-version: '24'
+    package-manager-cache: false # Explicitly disable caching if you don't have a lockfile
+- run: npm install
+- run: npm test
+```
+
 ## Check latest version
 
 The `check-latest` flag defaults to `false`. When set to `false`, the action will first check the local cache for a semver match. If unable to find a specific version in the cache, the action will attempt to download a version of Node.js. It will pull LTS versions from [node-versions releases](https://github.com/actions/node-versions/releases) and on miss or failure will fall back to the previous behavior of downloading directly from [node dist](https://nodejs.org/dist/). Use the default or set `check-latest` to `false` if you prefer stability and if you want to ensure a specific version of Node.js is always used.
@@ -45,10 +64,10 @@ If `check-latest` is set to `true`, the action first checks if the cached versio
 
 ```yaml
 steps:
-- uses: actions/checkout@v4
-- uses: actions/setup-node@v4
+- uses: actions/checkout@v6
+- uses: actions/setup-node@v6
   with:
-    node-version: '16'
+    node-version: '24'
     check-latest: true
 - run: npm ci
 - run: npm test
@@ -63,28 +82,38 @@ See [supported version syntax](https://github.com/actions/setup-node#supported-v
 
 ```yaml
 steps:
-- uses: actions/checkout@v4
-- uses: actions/setup-node@v4
+- uses: actions/checkout@v6
+- uses: actions/setup-node@v6
   with:
     node-version-file: '.nvmrc'
 - run: npm ci
 - run: npm test
 ```
 
-When using the `package.json` input, the action will look for `volta.node` first. If `volta.node` isn't defined, then it will look for `engines.node`.
+When using the `package.json` input, the action will look in the following fields for a specified Node version:
+1. It checks `volta.node` first.
+2. Then it checks `devEngines.runtime` for an entry with `"name": "node"`.
+3. Then it will look for `engines.node`.
+4. Otherwise it tries to resolve the file defined by [`volta.extends`](https://docs.volta.sh/advanced/workspaces)
+   and look for `volta.node`, `devEngines.runtime`, or `engines.node` recursively.
+
 
 ```json
 {
   "engines": {
-    "node": ">=16.0.0"
+    "node": "^22 || ^24"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "^24.3"
+    }
   },
   "volta": {
-    "node": "16.0.0"
+    "node": "24.11.1"
   }
 }
 ```
-
-Otherwise, when [`volta.extends`](https://docs.volta.sh/advanced/workspaces) is defined, then it will resolve the corresponding file and look for `volta.node` or `engines.node` recursively.
 
 ## Architecture
 
@@ -97,10 +126,10 @@ jobs:
     runs-on: windows-latest
     name: Node sample
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: '14'
+          node-version: '24'
           architecture: 'x64' # optional, x64 or x86. If not specified, x64 will be used by default
       - run: npm ci
       - run: npm test
@@ -118,10 +147,10 @@ jobs:
     runs-on: ubuntu-latest
     name: Node sample
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: '20.0.0-v8-canary' # it will install the latest v8 canary release for node 20.0.0
+          node-version: '24.0.0-v8-canary' # it will install the latest v8 canary release for node 24.0.0
       - run: npm ci
       - run: npm test
 ```
@@ -133,10 +162,10 @@ jobs:
     runs-on: ubuntu-latest
     name: Node sample
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: '20-v8-canary' # it will install the latest v8 canary release for node 20
+          node-version: '24-v8-canary' # it will install the latest v8 canary release for node 24
       - run: npm ci
       - run: npm test
 ```
@@ -149,10 +178,10 @@ jobs:
     runs-on: ubuntu-latest
     name: Node sample
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: 'v20.1.1-v8-canary20221103f7e2421e91'
+          node-version: 'v24.0.0-v8-canary2025030537242e55ac'
       - run: npm ci
       - run: npm test
 ```
@@ -169,10 +198,10 @@ jobs:
     runs-on: ubuntu-latest
     name: Node sample
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: '16-nightly' # it will install the latest nightly release for node 16
+          node-version: '24-nightly' # it will install the latest nightly release for node 24
       - run: npm ci
       - run: npm test
 ```
@@ -185,10 +214,10 @@ jobs:
     runs-on: ubuntu-latest
     name: Node sample
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: '16.0.0-nightly' # it will install the latest nightly release for node 16.0.0
+          node-version: '24.0.0-nightly' # it will install the latest nightly release for node 24.0.0
       - run: npm ci
       - run: npm test
 ```
@@ -201,10 +230,10 @@ jobs:
     runs-on: ubuntu-latest
     name: Node sample
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: '16.0.0-nightly20210420a0261d231c'
+          node-version: '24.0.0-nightly202505066102159fa1'
       - run: npm ci
       - run: npm test
 ```
@@ -219,27 +248,28 @@ jobs:
     runs-on: ubuntu-latest
     name: Node sample
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: '16.0.0-rc.1'
+          node-version: '24.0.0-rc.4'
       - run: npm ci
       - run: npm test
 ```
 
-**Note:** Unlike nightly versions, which support version range specifiers, you must specify the exact version for a release candidate: `16.0.0-rc.1`.
+**Note:** Unlike nightly versions, which support version range specifiers, you must specify the exact version for a release candidate: `24.0.0-rc.4`.
 
 ## Caching packages data
 The action follows [actions/cache](https://github.com/actions/cache/blob/main/examples.md#node---npm) guidelines, and caches global cache on the machine instead of `node_modules`, so cache can be reused between different Node.js versions.
 
 **Caching yarn dependencies:**
-Yarn caching handles both yarn versions: 1 or 2.
+Yarn caching handles both Yarn Classic (v1) and Yarn Berry (v2, v3, v4+).
+
 ```yaml
 steps:
-- uses: actions/checkout@v4
-- uses: actions/setup-node@v4
+- uses: actions/checkout@v6
+- uses: actions/setup-node@v6
   with:
-    node-version: '14'
+    node-version: '24'
     cache: 'yarn'
 - run: yarn install --frozen-lockfile # optional, --immutable
 - run: yarn test
@@ -255,13 +285,13 @@ steps:
 # NOTE: pnpm caching support requires pnpm version >= 6.10.0
 
 steps:
-- uses: actions/checkout@v4
-- uses: pnpm/action-setup@v2
+- uses: actions/checkout@v6
+- uses: pnpm/action-setup@v4
   with:
-    version: 6.32.9
-- uses: actions/setup-node@v4
+    version: 10
+- uses: actions/setup-node@v6
   with:
-    node-version: '14'
+    node-version: '24'
     cache: 'pnpm'
 - run: pnpm install
 - run: pnpm test
@@ -274,10 +304,10 @@ steps:
 **Using wildcard patterns to cache dependencies**
 ```yaml
 steps:
-- uses: actions/checkout@v4
-- uses: actions/setup-node@v4
+- uses: actions/checkout@v6
+- uses: actions/setup-node@v6
   with:
-    node-version: '14'
+    node-version: '24'
     cache: 'npm'
     cache-dependency-path: '**/package-lock.json'
 - run: npm ci
@@ -287,10 +317,10 @@ steps:
 **Using a list of file paths to cache dependencies**
 ```yaml
 steps:
-- uses: actions/checkout@v4
-- uses: actions/setup-node@v4
+- uses: actions/checkout@v6
+- uses: actions/setup-node@v6
   with:
-    node-version: '14'
+    node-version: '24'
     cache: 'npm'
     cache-dependency-path: |
       server/app/package-lock.json
@@ -298,6 +328,35 @@ steps:
 - run: npm ci
 - run: npm test
 ```
+
+**Restore-Only Cache**
+
+```yaml
+## In some workflows, you may want to restore a cache without saving it. This can help reduce cache writes and storage usage in workflows that only need to read from cache
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      # Restore Node.js modules cache (restore-only)
+      - name: Restore Node modules cache
+        uses: actions/cache@v5
+        id: cache-node-modules
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+      # Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      # Install dependencies
+      - run: npm install
+```
+
+> For more details related to cache scenarios, please refer [Node – npm](https://github.com/actions/cache/blob/main/examples.md#node---npm).
 
 ## Multiple Operating Systems and Architectures
 
@@ -312,21 +371,21 @@ jobs:
           - macos-latest
           - windows-latest
         node_version:
-          - 12
-          - 14
-          - 16
+          - 20
+          - 22
+          - 24
         architecture:
           - x64
         # an extra windows-x86 run:
         include:
-          - os: windows-2016
-            node_version: 12
+          - os: windows-latest
+            node_version: 24
             architecture: x86
     name: Node ${{ matrix.node_version }} - ${{ matrix.architecture }} on ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node_version }}
           architecture: ${{ matrix.architecture }}
@@ -337,16 +396,16 @@ jobs:
 ## Publish to npmjs and GPR with npm
 ```yaml
 steps:
-- uses: actions/checkout@v4
-- uses: actions/setup-node@v4
+- uses: actions/checkout@v6
+- uses: actions/setup-node@v6
   with:
-    node-version: '14.x'
+    node-version: '24.x'
     registry-url: 'https://registry.npmjs.org'
 - run: npm ci
 - run: npm publish
   env:
     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-- uses: actions/setup-node@v4
+- uses: actions/setup-node@v6
   with:
     registry-url: 'https://npm.pkg.github.com'
 - run: npm publish
@@ -357,16 +416,16 @@ steps:
 ## Publish to npmjs and GPR with yarn
 ```yaml
 steps:
-- uses: actions/checkout@v4
-- uses: actions/setup-node@v4
+- uses: actions/checkout@v6
+- uses: actions/setup-node@v6
   with:
-    node-version: '14.x'
+    node-version: '24.x'
     registry-url: <registry url>
 - run: yarn install --frozen-lockfile
 - run: yarn publish
   env:
     NODE_AUTH_TOKEN: ${{ secrets.YARN_TOKEN }}
-- uses: actions/setup-node@v4
+- uses: actions/setup-node@v6
   with:
     registry-url: 'https://npm.pkg.github.com'
 - run: yarn publish
@@ -377,10 +436,10 @@ steps:
 ## Use private packages
 ```yaml
 steps:
-- uses: actions/checkout@v4
-- uses: actions/setup-node@v4
+- uses: actions/checkout@v6
+- uses: actions/setup-node@v6
   with:
-    node-version: '14.x'
+    node-version: '24.x'
     registry-url: 'https://registry.npmjs.org'
 # Skip post-install scripts here, as a malicious
 # script could steal NODE_AUTH_TOKEN.
@@ -397,10 +456,10 @@ Below you can find a sample "Setup .yarnrc.yml" step, that is going to allow you
 
 ```yaml
 steps:
-- uses: actions/checkout@v4
-- uses: actions/setup-node@v4
+- uses: actions/checkout@v6
+- uses: actions/setup-node@v6
   with:
-    node-version: '14.x'
+    node-version: '24.x'
 - name: Setup .yarnrc.yml
   run: |
     yarn config set npmScopes.my-org.npmRegistryServer "https://npm.pkg.github.com"
@@ -416,5 +475,56 @@ To access private GitHub Packages within the same organization, go to "Manage Ac
 
 Please refer to the [Ensuring workflow access to your package - Configuring a package's access control and visibility](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility#ensuring-workflow-access-to-your-package) for more details.
 
-### always-auth input
-The always-auth input sets `always-auth=true` in .npmrc file. With this option set [npm](https://docs.npmjs.com/cli/v6/using-npm/config#always-auth)/yarn sends the authentication credentials when making a request to the registries.
+## Publishing to npm with Trusted Publisher (OIDC)
+
+npm supports Trusted Publishers, enabling packages to be published from GitHub Actions using OpenID Connect (OIDC) instead of long-lived npm tokens. This improves security by replacing static credentials with short-lived tokens, reducing the risk of credential leakage and simplifying authentication in CI/CD workflows.
+
+### Requirements
+
+Trusted publishing requires a compatible npm version:
+
+* **npm ≥ 11.5.1 (required)**
+* **Node.js 24 or newer (recommended)** — includes a compatible npm version by default
+
+> If npm is below 11.5.1, publishing will fail even if OIDC permissions are correctly configured.
+
+You must also configure a **Trusted Publisher** in npm for your package/scope that matches your GitHub repository and workflow (and optional environment, if used).
+
+### Example workflow
+
+```yaml
+    permissions:
+      contents: read
+      id-token: write  # Required for OIDC
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: npm ci
+      - run: npm run build --if-present
+      - run: npm publish
+```
+
+> **Note**: If the Trusted Publisher configuration (GitHub owner/repo/workflow file, and optional environment) does not match the workflow run identity exactly, publishing may fail with **E404 Not Found** even if the package exists on npm.
+
+For more details, see the [npm Trusted Publishers documentation](https://docs.npmjs.com/trusted-publishers) and the [GitHub Actions OpenID Connect (OIDC) overview](https://docs.github.com/en/actions/concepts/security/openid-connect).
+
+## Use private mirror
+
+It is possible to use a private mirror hosting Node.js binaries. This mirror must be a full mirror of the official Node.js distribution.
+The mirror URL can be set using the `mirror` input.
+It is possible to specify a token to authenticate with the mirror using the `mirror-token` input.
+The token will be passed in the `Authorization` header.
+
+```yaml
+- uses: actions/setup-node@v6
+  with:
+    node-version: '24.x'
+    mirror: 'https://nodejs.org/dist'
+    mirror-token: 'your-mirror-token'
+```

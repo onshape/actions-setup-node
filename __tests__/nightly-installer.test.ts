@@ -255,7 +255,6 @@ describe('setup-node', () => {
     const versionSpec = '13.13.1-nightly20200415947ddec091';
 
     inputs['node-version'] = versionSpec;
-    inputs['always-auth'] = false;
     inputs['token'] = 'faketoken';
 
     // ... but not in the local cache
@@ -291,7 +290,6 @@ describe('setup-node', () => {
     ];
 
     inputs['node-version'] = versionSpec;
-    inputs['always-auth'] = false;
     inputs['token'] = 'faketoken';
 
     // ... but not in the local cache
@@ -315,7 +313,7 @@ describe('setup-node', () => {
     await main.run();
 
     workingUrls.forEach(url => {
-      expect(dlSpy).toHaveBeenCalledWith(url);
+      expect(dlSpy).toHaveBeenCalledWith(url, undefined, undefined);
     });
     expect(cnSpy).toHaveBeenCalledWith(`::add-path::${toolPath}${osm.EOL}`);
   });
@@ -333,7 +331,6 @@ describe('setup-node', () => {
     ];
 
     inputs['node-version'] = versionSpec;
-    inputs['always-auth'] = false;
     inputs['token'] = 'faketoken';
 
     // ... but not in the local cache
@@ -389,7 +386,6 @@ describe('setup-node', () => {
     const versionSpec = '18.0.0-nightly202204180699150267';
 
     inputs['node-version'] = versionSpec;
-    inputs['always-auth'] = false;
     inputs['token'] = 'faketoken';
 
     findSpy.mockImplementation(() => '');
@@ -427,10 +423,56 @@ describe('setup-node', () => {
 
       inputs['node-version'] = version;
       inputs['architecture'] = arch;
-      inputs['always-auth'] = false;
       inputs['token'] = 'faketoken';
 
       const expectedUrl = `https://nodejs.org/download/nightly/v${version}/node-v${version}-${platform}-${arch}.${fileExtension}`;
+
+      // ... but not in the local cache
+      findSpy.mockImplementation(() => '');
+      findAllVersionsSpy.mockImplementation(() => []);
+
+      dlSpy.mockImplementation(async () => '/some/temp/path');
+      const toolPath = path.normalize(`/cache/node/${version}/${arch}`);
+      exSpy.mockImplementation(async () => '/some/other/temp/path');
+      cacheSpy.mockImplementation(async () => toolPath);
+
+      await main.run();
+      expect(dlSpy).toHaveBeenCalled();
+      expect(logSpy).toHaveBeenCalledWith(
+        `Acquiring ${version} - ${arch} from ${expectedUrl}`
+      );
+    }
+  }, 100000);
+
+  it('acquires specified architecture of node from mirror', async () => {
+    for (const {arch, version, osSpec} of [
+      {
+        arch: 'x86',
+        version: '18.0.0-nightly202110204cb3e06ed8',
+        osSpec: 'win32'
+      },
+      {
+        arch: 'x86',
+        version: '20.0.0-nightly2022101987cdf7d412',
+        osSpec: 'win32'
+      }
+    ]) {
+      os.platform = osSpec;
+      os.arch = arch;
+      const fileExtension = os.platform === 'win32' ? '7z' : 'tar.gz';
+      const platform = {
+        linux: 'linux',
+        darwin: 'darwin',
+        win32: 'win'
+      }[os.platform];
+
+      inputs['node-version'] = version;
+      inputs['architecture'] = arch;
+      inputs['token'] = 'faketoken';
+      inputs['mirror'] = 'https://my-mirror.org';
+      inputs['mirror-token'] = 'my-mirror-token';
+
+      const expectedUrl = `https://my-mirror.org/download/nightly/v${version}/node-v${version}-${platform}-${arch}.${fileExtension}`;
 
       // ... but not in the local cache
       findSpy.mockImplementation(() => '');

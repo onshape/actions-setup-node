@@ -12,36 +12,52 @@ This action provides the following functionality for GitHub Actions users:
 - Registering problem matchers for error output
 - Configuring authentication for GPR or npm
 
+## Breaking changes in V6
+
+- Caching is now automatically enabled for npm projects when either the `devEngines.packageManager` field or the top-level `packageManager` field in `package.json` is set to `npm`. For other package managers, such as Yarn and pnpm, caching is disabled by default and must be configured manually using the `cache` input.
+
+- The `always-auth` input has been removed, as it is deprecated and will no longer be supported in future npm releases. To ensure your workflows continue to run without warnings or errors, please remove any references to `always-auth` from your configuration.
+
+## Breaking changes in V5
+
+- Enabled caching by default with package manager detection if no cache input is provided.
+  > For workflows with elevated privileges or access to sensitive information, we recommend disabling automatic caching by setting `package-manager-cache: false` when caching is not needed for secure operation.
+
+- Upgraded action from node20 to node24.
+  > Make sure your runner is on version v2.327.1 or later to ensure compatibility with this release. [See Release Notes](https://github.com/actions/runner/releases/tag/v2.327.1)
+
+For more details, see the full release notes on the [releases page](https://github.com/actions/setup-node/releases/v5.0.0)
+
 ## Usage
 
 See [action.yml](action.yml)
 
 <!-- start usage -->
 ```yaml
-- uses: actions/setup-node@v4
+- uses: actions/setup-node@v6
   with:
     # Version Spec of the version to use in SemVer notation.
-    # It also emits such aliases as lts, latest, nightly and canary builds
+    # It also admits such aliases as lts/*, latest, nightly and canary builds
     # Examples: 12.x, 10.15.1, >=10.15.0, lts/Hydrogen, 16-nightly, latest, node
     node-version: ''
 
     # File containing the version Spec of the version to use.  Examples: package.json, .nvmrc, .node-version, .tool-versions.
-    # If node-version and node-version-file are both provided the action will use version from node-version. 
+    # If node-version and node-version-file are both provided the action will use version from node-version.
     node-version-file: ''
 
-    # Set this option if you want the action to check for the latest available version 
+    # Set this option if you want the action to check for the latest available version
     # that satisfies the version spec.
-    # It will only get affect for lts Nodejs versions (12.x, >=10.15.0, lts/Hydrogen). 
+    # It will only get affect for lts Nodejs versions (12.x, >=10.15.0, lts/Hydrogen).
     # Default: false
     check-latest: false
 
     # Target architecture for Node to use. Examples: x86, x64. Will use system architecture by default.
-    # Default: ''. The action use system architecture by default 
+    # Default: ''. The action use system architecture by default
     architecture: ''
 
-    # Used to pull node distributions from https://github.com/actions/node-versions. 
-    # Since there's a default, this is typically not supplied by the user. 
-    # When running this action on github.com, the default value is sufficient. 
+    # Used to pull node distributions from https://github.com/actions/node-versions.
+    # Since there's a default, this is typically not supplied by the user.
+    # When running this action on github.com, the default value is sufficient.
     # When running on GHES, you can pass a personal access token for github.com if you are experiencing rate limiting.
     #
     # We recommend using a service account with the least permissions necessary. Also
@@ -57,25 +73,41 @@ See [action.yml](action.yml)
     # Default: ''
     cache: ''
 
-    # Used to specify the path to a dependency file: package-lock.json, yarn.lock, etc. 
-    # It will generate hash from the target file for primary key. It works only If cache is specified.  
+    # Controls automatic caching for npm. By default, caching for npm is enabled if either the devEngines.packageManager field or the top-level packageManager field in package.json specifies npm and no explicit cache input is provided.
+    # To disable automatic caching for npm, set package-manager-cache to false.
+    # default: true
+    package-manager-cache: true
+
+    # Used to specify the path to a dependency file: package-lock.json, yarn.lock, etc.
+    # It will generate hash from the target file for primary key. It works only If cache is specified.
     # Supports wildcards or a list of file names for caching multiple dependencies.
     # Default: ''
     cache-dependency-path: ''
 
-    # Optional registry to set up for auth. Will set the registry in a project level .npmrc and .yarnrc file, 
+    # Optional registry to set up for auth. Will set the registry in a project level .npmrc and .yarnrc file,
     # and set up auth to read in from env.NODE_AUTH_TOKEN.
     # Default: ''
     registry-url: ''
 
-    # Optional scope for authenticating against scoped registries. 
+    # Optional scope for authenticating against scoped registries.
     # Will fall back to the repository owner when using the GitHub Packages registry (https://npm.pkg.github.com/).
     # Default: ''
     scope: ''
 
-    # Set always-auth option in npmrc file.
+    # Optional mirror to download binaries from.
+    # Artifacts need to match the official Node.js
+    # Example:
+    # V8 Canary Build: <mirror_url>/download/v8-canary
+    # RC Build: <mirror_url>/download/rc
+    # Official: Build <mirror_url>/dist
+    # Nightly build: <mirror_url>/download/nightly
     # Default: ''
-    always-auth: ''
+    mirror: ''
+
+    # Optional mirror token.
+    # The token will be used as a bearer token in the Authorization header
+    # Default: ''
+    mirror-token: ''
 ```
 <!-- end usage -->
 
@@ -83,15 +115,15 @@ See [action.yml](action.yml)
 
 ```yaml
 steps:
-- uses: actions/checkout@v4
-- uses: actions/setup-node@v4
+- uses: actions/checkout@v6
+- uses: actions/setup-node@v6
   with:
-    node-version: 18
+    node-version: 24
 - run: npm ci
 - run: npm test
 ```
 
-The `node-version` input is optional. If not supplied, the node version from PATH will be used. However, it is recommended to always specify Node.js version and don't rely on the system one.
+The `node-version` input is optional. If not supplied, the node version from PATH will be used. However, it is recommended to always specify Node.js version and not rely on the system one.
 
 The action will first check the local cache for a semver match. If unable to find a specific version in the cache, the action will attempt to download a version of Node.js. It will pull LTS versions from [node-versions releases](https://github.com/actions/node-versions/releases) and on miss or failure will fall back to the previous behavior of downloading directly from [node dist](https://nodejs.org/dist/).
 
@@ -103,9 +135,9 @@ The `node-version` input supports the Semantic Versioning Specification, for mor
 
 Examples:
 
- - Major versions: `18`, `20`
- - More specific versions: `10.15`, `16.15.1` , `18.4.0`
- - NVM LTS syntax: `lts/erbium`, `lts/fermium`, `lts/*`, `lts/-n`
+ - Major versions: `22`, `24`
+ - More specific versions: `20.19`, `22.17.1` , `24.8.0`
+ - NVM LTS syntax: `lts/iron`, `lts/jod`, `lts/*`, `lts/-n`
  - Latest release: `*` or `latest`/`current`/`node`
 
 **Note:** Like the other values, `*` will get the latest [locally-cached Node.js version](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2204-Readme.md#nodejs), or the latest version from [actions/node-versions](https://github.com/actions/node-versions/blob/main/versions-manifest.json), depending on the [`check-latest`](docs/advanced-usage.md#check-latest-version) input.
@@ -116,11 +148,11 @@ Since it will not be cached always, there is possibility of hitting rate limit w
 
 ### Checking in lockfiles
 
-It's **always** recommended to commit the lockfile of your package manager for security and performance reasons. For more information consult the "Working with lockfiles" section of the [Advanced usage](docs/advanced-usage.md#working-with-lockfiles) guide.
+It's **strongly recommended** to commit the lockfile of your package manager for security and performance reasons. For more information consult the "Working with lockfiles" section of the [Advanced usage](docs/advanced-usage.md#working-with-lockfiles) guide.
 
 ## Caching global packages data
 
-The action has a built-in functionality for caching and restoring dependencies. It uses [actions/cache](https://github.com/actions/cache) under the hood for caching global packages data but requires less configuration settings. Supported package managers are `npm`, `yarn`, `pnpm` (v6.10+). The `cache` input is optional, and caching is turned off by default.
+The action has a built-in functionality for caching and restoring dependencies. It uses [actions/cache](https://github.com/actions/cache) under the hood for caching global packages data but requires less configuration settings. Supported package managers are `npm`, `yarn`, `pnpm` (v6.10+). The `cache` input is optional.
 
 The action defaults to search for the dependency file (`package-lock.json`, `npm-shrinkwrap.json` or `yarn.lock`) in the repository root, and uses its hash as a part of the cache key. Use `cache-dependency-path` for cases when multiple dependency files are used, or they are located in different subdirectories.
 
@@ -132,10 +164,10 @@ See the examples of using cache for `yarn`/`pnpm` and `cache-dependency-path` in
 
 ```yaml
 steps:
-- uses: actions/checkout@v4
-- uses: actions/setup-node@v4
+- uses: actions/checkout@v6
+- uses: actions/setup-node@v6
   with:
-    node-version: 20
+    node-version: 24
     cache: 'npm'
 - run: npm ci
 - run: npm test
@@ -145,15 +177,29 @@ steps:
 
 ```yaml
 steps:
-- uses: actions/checkout@v4
-- uses: actions/setup-node@v4
+- uses: actions/checkout@v6
+- uses: actions/setup-node@v6
   with:
-    node-version: 20
+    node-version: 24
     cache: 'npm'
     cache-dependency-path: subdir/package-lock.json
 - run: npm ci
 - run: npm test
 ```
+
+Caching for npm dependencies is automatically enabled when your `package.json` contains either `devEngines.packageManager` field or top-level `packageManager` field set to `npm`, and no explicit cache input is provided.
+
+This behavior is controlled by the `package-manager-cache` input, which defaults to `true`. To turn off automatic caching, set `package-manager-cache` to `false`.
+
+```yaml
+steps:
+- uses: actions/checkout@v6
+- uses: actions/setup-node@v6
+  with:
+    package-manager-cache: false
+- run: npm ci
+```
+> If your `package.json` file does not include a `packageManager` field set to `npm`, caching will be disabled unless you explicitly enable it. For workflows with elevated privileges or access to sensitive information, we recommend disabling automatic caching for npm by setting `package-manager-cache: false` when caching is not required for secure operation.
 
 ## Matrix Testing
 
@@ -163,12 +209,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: [ 14, 16, 18 ]
+        node: [ 20, 22, 24 ]
     name: Node ${{ matrix.node }} sample
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
       - run: npm ci
@@ -182,10 +228,10 @@ jobs:
 To get a higher rate limit, you can [generate a personal access token on github.com](https://github.com/settings/tokens/new) and pass it as the `token` input for the action:
 
 ```yaml
-uses: actions/setup-node@v4
+uses: actions/setup-node@v6
 with:
   token: ${{ secrets.GH_DOTCOM_TOKEN }}
-  node-version: 20
+  node-version: 24
 ```
 
 If the runner is not able to access github.com, any Nodejs versions requested during a workflow run must come from the runner's tool cache. See "[Setting up the tool cache on self-hosted runners without internet access](https://docs.github.com/en/enterprise-server@3.2/admin/github-actions/managing-access-to-actions-from-githubcom/setting-up-the-tool-cache-on-self-hosted-runners-without-internet-access)" for more information.
@@ -203,6 +249,17 @@ If the runner is not able to access github.com, any Nodejs versions requested du
  - [Publishing to npmjs and GPR with npm](docs/advanced-usage.md#publish-to-npmjs-and-gpr-with-npm)
  - [Publishing to npmjs and GPR with yarn](docs/advanced-usage.md#publish-to-npmjs-and-gpr-with-yarn)
  - [Using private packages](docs/advanced-usage.md#use-private-packages)
+ - [Publishing to npm with Trusted Publisher (OIDC)](docs/advanced-usage.md#publishing-to-npm-with-trusted-publisher-oidc)
+ - [Using private mirror](docs/advanced-usage.md#use-private-mirror)
+
+## Recommended permissions
+
+When using the `setup-node` action in your GitHub Actions workflow, it is recommended to set the following permissions to ensure proper functionality:
+
+```yaml
+permissions:
+  contents: read # access to check out code and install dependencies
+```
 
 ## License
 
