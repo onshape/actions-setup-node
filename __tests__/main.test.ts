@@ -20,6 +20,7 @@ describe('main tests', () => {
 
   let infoSpy: jest.SpyInstance;
   let warningSpy: jest.SpyInstance;
+  let saveStateSpy: jest.SpyInstance;
   let inSpy: jest.SpyInstance;
   let setOutputSpy: jest.SpyInstance;
   let startGroupSpy: jest.SpyInstance;
@@ -53,6 +54,8 @@ describe('main tests', () => {
     setOutputSpy.mockImplementation(() => {});
     warningSpy = jest.spyOn(core, 'warning');
     warningSpy.mockImplementation(() => {});
+    saveStateSpy = jest.spyOn(core, 'saveState');
+    saveStateSpy.mockImplementation(() => {});
     startGroupSpy = jest.spyOn(core, 'startGroup');
     startGroupSpy.mockImplementation(() => {});
     endGroupSpy = jest.spyOn(core, 'endGroup');
@@ -91,22 +94,24 @@ describe('main tests', () => {
 
   describe('getNodeVersionFromFile', () => {
     each`
-      contents                                     | expected
-      ${'12'}                                      | ${'12'}
-      ${'12.3'}                                    | ${'12.3'}
-      ${'12.3.4'}                                  | ${'12.3.4'}
-      ${'v12.3.4'}                                 | ${'12.3.4'}
-      ${'lts/erbium'}                              | ${'lts/erbium'}
-      ${'lts/*'}                                   | ${'lts/*'}
-      ${'nodejs 12.3.4'}                           | ${'12.3.4'}
-      ${'ruby 2.3.4\nnodejs 12.3.4\npython 3.4.5'} | ${'12.3.4'}
-      ${''}                                        | ${''}
-      ${'unknown format'}                          | ${'unknown format'}
-      ${'  14.1.0  '}                              | ${'14.1.0'}
-      ${'{"volta": {"node": ">=14.0.0 <=17.0.0"}}'}| ${'>=14.0.0 <=17.0.0'}
-      ${'{"volta": {"extends": "./package.json"}}'}| ${'18.0.0'}
-      ${'{"engines": {"node": "17.0.0"}}'}         | ${'17.0.0'}
-      ${'{}'}                                      | ${null}
+      contents                                                                                   | expected
+      ${'12'}                                                                                    | ${'12'}
+      ${'12.3'}                                                                                  | ${'12.3'}
+      ${'12.3.4'}                                                                                | ${'12.3.4'}
+      ${'v12.3.4'}                                                                               | ${'12.3.4'}
+      ${'lts/erbium'}                                                                            | ${'lts/erbium'}
+      ${'lts/*'}                                                                                 | ${'lts/*'}
+      ${'nodejs 12.3.4'}                                                                         | ${'12.3.4'}
+      ${'ruby 2.3.4\nnodejs 12.3.4\npython 3.4.5'}                                               | ${'12.3.4'}
+      ${''}                                                                                      | ${''}
+      ${'unknown format'}                                                                        | ${'unknown format'}
+      ${'  14.1.0  '}                                                                            | ${'14.1.0'}
+      ${'{}'}                                                                                    | ${null}
+      ${'{"volta": {"node": ">=14.0.0 <=17.0.0"}}'}                                              | ${'>=14.0.0 <=17.0.0'}
+      ${'{"volta": {"extends": "./package.json"}}'}                                              | ${'18.0.0'}
+      ${'{"engines": {"node": "17.0.0"}}'}                                                       | ${'17.0.0'}
+      ${'{"devEngines": {"runtime": {"name": "node", "version": "22.0.0"}}}'}                    | ${'22.0.0'}
+      ${'{"devEngines": {"runtime": [{"name": "bun"}, {"name": "node", "version": "22.0.0"}]}}'} | ${'22.0.0'}
     `.it('parses "$contents"', ({contents, expected}) => {
       const existsSpy = jest.spyOn(fs, 'existsSync');
       existsSpy.mockImplementation(() => true);
@@ -278,6 +283,151 @@ describe('main tests', () => {
       expect(warningSpy).toHaveBeenCalledWith(
         'The runner was not able to contact the cache service. Caching will be skipped'
       );
+    });
+  });
+
+  describe('cache feature tests', () => {
+    it('Should enable caching when packageManager is npm and cache input is not provided', async () => {
+      inputs['package-manager-cache'] = 'true';
+      inputs['cache'] = '';
+      isCacheActionAvailable.mockImplementation(() => true);
+
+      inSpy.mockImplementation(name => inputs[name]);
+      const readFileSpy = jest.spyOn(fs, 'readFileSync');
+      readFileSpy.mockImplementation(() =>
+        JSON.stringify({
+          packageManager: 'npm@10.8.2'
+        })
+      );
+
+      await main.run();
+
+      expect(saveStateSpy).toHaveBeenCalledWith(expect.anything(), 'npm');
+    });
+
+    it('Should enable caching when devEngines.packageManager.name is "npm" and cache input is not provided', async () => {
+      inputs['package-manager-cache'] = 'true';
+      inputs['cache'] = '';
+      isCacheActionAvailable.mockImplementation(() => true);
+
+      inSpy.mockImplementation(name => inputs[name]);
+      const readFileSpy = jest.spyOn(fs, 'readFileSync');
+      readFileSpy.mockImplementation(() =>
+        JSON.stringify({
+          devEngines: {
+            packageManager: {name: 'npm'}
+          }
+        })
+      );
+
+      await main.run();
+
+      expect(saveStateSpy).toHaveBeenCalledWith(expect.anything(), 'npm');
+    });
+
+    it('Should enable caching when devEngines.packageManager is array and one entry has name "npm"', async () => {
+      inputs['package-manager-cache'] = 'true';
+      inputs['cache'] = '';
+      isCacheActionAvailable.mockImplementation(() => true);
+
+      inSpy.mockImplementation(name => inputs[name]);
+      const readFileSpy = jest.spyOn(fs, 'readFileSync');
+      readFileSpy.mockImplementation(() =>
+        JSON.stringify({
+          devEngines: {
+            packageManager: [{name: 'pnpm'}, {name: 'npm'}]
+          }
+        })
+      );
+
+      await main.run();
+
+      expect(saveStateSpy).toHaveBeenCalledWith(expect.anything(), 'npm');
+    });
+
+    it('Should not enable caching if packageManager is "pnpm@8.0.0" and cache input is not provided', async () => {
+      inputs['package-manager-cache'] = 'true';
+      inputs['cache'] = '';
+      inSpy.mockImplementation(name => inputs[name]);
+      const readFileSpy = jest.spyOn(fs, 'readFileSync');
+      readFileSpy.mockImplementation(() =>
+        JSON.stringify({
+          packageManager: 'pnpm@8.0.0'
+        })
+      );
+
+      await main.run();
+
+      expect(saveStateSpy).not.toHaveBeenCalled();
+    });
+
+    it('Should not enable caching if devEngines.packageManager.name is "pnpm"', async () => {
+      inputs['package-manager-cache'] = 'true';
+      inputs['cache'] = '';
+      inSpy.mockImplementation(name => inputs[name]);
+      const readFileSpy = jest.spyOn(fs, 'readFileSync');
+      readFileSpy.mockImplementation(() =>
+        JSON.stringify({
+          devEngines: {
+            packageManager: {name: 'pnpm'}
+          }
+        })
+      );
+
+      await main.run();
+
+      expect(saveStateSpy).not.toHaveBeenCalled();
+    });
+
+    it('Should not enable caching if devEngines.packageManager is array without "npm"', async () => {
+      inputs['package-manager-cache'] = 'true';
+      inputs['cache'] = '';
+      inSpy.mockImplementation(name => inputs[name]);
+      const readFileSpy = jest.spyOn(fs, 'readFileSync');
+      readFileSpy.mockImplementation(() =>
+        JSON.stringify({
+          devEngines: {
+            packageManager: [{name: 'pnpm'}, {name: 'yarn'}]
+          }
+        })
+      );
+
+      await main.run();
+
+      expect(saveStateSpy).not.toHaveBeenCalled();
+    });
+
+    it('Should not enable caching if packageManager field is missing in package.json and cache input is not provided', async () => {
+      inputs['package-manager-cache'] = 'true';
+      inputs['cache'] = '';
+      inSpy.mockImplementation(name => inputs[name]);
+      const readFileSpy = jest.spyOn(fs, 'readFileSync');
+      readFileSpy.mockImplementation(() =>
+        JSON.stringify({
+          // packageManager field is not present
+        })
+      );
+
+      await main.run();
+
+      expect(saveStateSpy).not.toHaveBeenCalled();
+    });
+
+    it('Should skip caching when package-manager-cache is false', async () => {
+      inputs['package-manager-cache'] = 'false';
+      inputs['cache'] = '';
+      inSpy.mockImplementation(name => inputs[name]);
+      await main.run();
+      expect(saveStateSpy).not.toHaveBeenCalled();
+    });
+
+    it('Should enable caching with cache input explicitly provided', async () => {
+      inputs['package-manager-cache'] = 'true';
+      inputs['cache'] = 'npm';
+      inSpy.mockImplementation(name => inputs[name]);
+      isCacheActionAvailable.mockImplementation(() => true);
+      await main.run();
+      expect(saveStateSpy).toHaveBeenCalledWith(expect.anything(), 'npm');
     });
   });
 });

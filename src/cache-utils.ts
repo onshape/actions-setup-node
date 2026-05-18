@@ -167,14 +167,12 @@ const getCacheDirectoriesFromCacheDependencyPath = async (
   packageManagerInfo: PackageManagerInfo,
   cacheDependencyPath: string
 ): Promise<string[]> => {
-  const projectDirectories = await getProjectDirectoriesFromCacheDependencyPath(
-    cacheDependencyPath
-  );
+  const projectDirectories =
+    await getProjectDirectoriesFromCacheDependencyPath(cacheDependencyPath);
   const cacheFoldersPaths = await Promise.all(
     projectDirectories.map(async projectDirectory => {
-      const cacheFolderPath = await packageManagerInfo.getCacheFolderPath(
-        projectDirectory
-      );
+      const cacheFolderPath =
+        await packageManagerInfo.getCacheFolderPath(projectDirectory);
       core.debug(
         `${packageManagerInfo.name}'s cache folder "${cacheFolderPath}" configured for the directory "${projectDirectory}"`
       );
@@ -295,7 +293,13 @@ export function isGhes(): boolean {
   const ghUrl = new URL(
     process.env['GITHUB_SERVER_URL'] || 'https://github.com'
   );
-  return ghUrl.hostname.toUpperCase() !== 'GITHUB.COM';
+
+  const hostname = ghUrl.hostname.trimEnd().toUpperCase();
+  const isGitHubHost = hostname === 'GITHUB.COM';
+  const isGitHubEnterpriseCloudHost = hostname.endsWith('.GHE.COM');
+  const isLocalHost = hostname.endsWith('.LOCALHOST');
+
+  return !isGitHubHost && !isGitHubEnterpriseCloudHost && !isLocalHost;
 }
 
 export function isCacheFeatureAvailable(): boolean {
